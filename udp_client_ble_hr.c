@@ -208,7 +208,7 @@ static void gattc_profile_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_
         }
         ESP_LOGI(GATTC_TAG, "open success");
         break;
-// jeff :  discovery service 		
+// jeff :  discovery service    
     case ESP_GATTC_DIS_SRVC_CMPL_EVT:
         if (param->dis_srvc_cmpl.status != ESP_GATT_OK){
             ESP_LOGE(GATTC_TAG, "discover service failed, status %d", param->dis_srvc_cmpl.status);
@@ -292,7 +292,7 @@ static void gattc_profile_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_
             }
         }
          break;
-		 
+     
     case ESP_GATTC_REG_FOR_NOTIFY_EVT: {
         ESP_LOGI(GATTC_TAG, "ESP_GATTC_REG_FOR_NOTIFY_EVT");
         if (p_data->reg_for_notify.status != ESP_GATT_OK){
@@ -350,14 +350,14 @@ static void gattc_profile_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_
         }
         break;
     }
-//jeff: notify data.	
+//jeff: notify data.  
     case ESP_GATTC_NOTIFY_EVT:
         if (p_data->notify.is_notify){
             ESP_LOGI(GATTC_TAG, "ESP_GATTC_NOTIFY_EVT, receive notify value:");
         }else{
             ESP_LOGI(GATTC_TAG, "ESP_GATTC_NOTIFY_EVT, receive indicate value:");
         }
-	// heart rate value .	notify.value_len= 2, 00 48, 
+  // heart rate value . notify.value_len= 2, 00 48, 
         esp_log_buffer_hex(GATTC_TAG, p_data->notify.value, p_data->notify.value_len);
         for (int i = 0; i < p_data->notify.value_len; i++) 
         {
@@ -399,11 +399,11 @@ static void gattc_profile_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_
         }
         ESP_LOGI(GATTC_TAG, "write char success ");
         break;
-//jeff :  disconnect 		
+//jeff :  disconnect    
     case ESP_GATTC_DISCONNECT_EVT:
         ble_connect = false;
         get_server = false;
-	    uint32_t duration = 3000;
+      uint32_t duration = 3600;
         esp_ble_gap_start_scanning(duration);
 
         ESP_LOGI(GATTC_TAG, "ESP_GATTC_DISCONNECT_EVT, reason = %d", p_data->disconnect.reason);
@@ -432,7 +432,7 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
     case ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT: {
         //the unit of the duration is second
         ESP_LOGI(GATTC_TAG, "BLE reconnect here");
-        uint32_t duration = 300;
+        uint32_t duration = 3600;
         esp_ble_gap_start_scanning(duration);
         break;
     }
@@ -450,18 +450,18 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
         switch (scan_result->scan_rst.search_evt) {
         case ESP_GAP_SEARCH_INQ_RES_EVT:
            //  esp_log_buffer_hex(GATTC_TAG, scan_result->scan_rst.bda, 6);
-			
+      
             //ESP_LOGI(GATTC_TAG, "searched Adv Data Len %d, Scan Response Len %d", scan_result->scan_rst.adv_data_len, scan_result->scan_rst.scan_rsp_len);
 
 
-	    adv_name = esp_ble_resolve_adv_data(scan_result->scan_rst.ble_adv,
+      adv_name = esp_ble_resolve_adv_data(scan_result->scan_rst.ble_adv,
                                                 ESP_BLE_AD_TYPE_NAME_CMPL, &adv_name_len);
-	   if(scan_result->scan_rst.adv_data_len == 29)
-	    {
-	     	ESP_LOGI(GATTC_TAG, "searched Adv Data Len %d, Scan Response Len %d", scan_result->scan_rst.adv_data_len, scan_result->scan_rst.scan_rsp_len);
-	    	ESP_LOGI(GATTC_TAG, "searched Device Name Len %d", adv_name_len); 
-	   }
-			
+     if(scan_result->scan_rst.adv_data_len == 29)
+      {
+        ESP_LOGI(GATTC_TAG, "searched Adv Data Len %d, Scan Response Len %d", scan_result->scan_rst.adv_data_len, scan_result->scan_rst.scan_rsp_len);
+        ESP_LOGI(GATTC_TAG, "searched Device Name Len %d", adv_name_len); 
+     }
+      
             esp_log_buffer_char(GATTC_TAG, adv_name, adv_name_len);
 
 #if CONFIG_EXAMPLE_DUMP_ADV_DATA_AND_SCAN_RESP
@@ -479,14 +479,14 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
             // vTaskDelay(1000/portTICK_PERIOD_MS);
 if(scan_result->scan_rst.adv_data_len == 29)
 {
-	    ESP_LOGI(GATTC_TAG, "jeff len %d, %d\r\n:", strlen(remote_device_name), adv_name_len);
-	    // ESP_LOGI(GATTC_TAG, "jeff name %s, %s\r\n:", remote_device_name, (char *)adv_name);
+      ESP_LOGI(GATTC_TAG, "jeff len %d, %d\r\n:", strlen(remote_device_name), adv_name_len);
+      // ESP_LOGI(GATTC_TAG, "jeff name %s, %s\r\n:", remote_device_name, (char *)adv_name);
 }
             if (adv_name != NULL) {
                 if (strlen(remote_device_name) == adv_name_len && strncmp((char *)adv_name, remote_device_name, adv_name_len) == 0) {
                     ESP_LOGI(GATTC_TAG, "searched device %s\n", remote_device_name);
-		    ESP_LOGI(GATTC_TAG, "========  find  ===============\n");
-					
+        ESP_LOGI(GATTC_TAG, "========  find  ===============\n");
+          
                     if (ble_connect == false) {
                         ble_connect = true;
                         ESP_LOGI(GATTC_TAG, "connect to the remote device.");
@@ -675,7 +675,7 @@ void wifi_init_sta(void)
             /* Setting a password implies station will connect to all security modes including WEP/WPA.
              * However these modes are deprecated and not advisable to be used. Incase your Access point
              * doesn't support WPA2, these mode can be enabled by commenting below line */
-	     // .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+       // .threshold.authmode = WIFI_AUTH_WPA2_PSK,
 
             .pmf_cfg = {
                 .capable = true,
@@ -686,7 +686,7 @@ void wifi_init_sta(void)
     strcpy((char *)wifi_config.sta.ssid, (char *)wifi_ssid);
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
-    ESP_ERROR_CHECK(esp_wifi_start() );
+    ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "wifi_init_sta finished.");
 
@@ -718,7 +718,6 @@ void wifi_init_sta(void)
     // ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
     // vEventGroupDelete(s_wifi_event_group);
 
-    
 }
 
 static void wifi_connect_manager(void *pvParameters)
@@ -912,17 +911,17 @@ int hostUartParser(unsigned int u8KeyIn)    //Host to Front Parser(Uart Parser)
         BufCnt = 0;
         State = 3;
         break;
-	case 3:
-		printf("case3\r\n");
-		*pDst = u8KeyIn;
-		pDst++;
-		hostToMcu.checkSum ^= u8KeyIn;
-		BufCnt++;
-		if (BufCnt >= hostToMcu.messageBodySize)
-		{
-			State = 4;
-		}
-		break;
+  case 3:
+    printf("case3\r\n");
+    *pDst = u8KeyIn;
+    pDst++;
+    hostToMcu.checkSum ^= u8KeyIn;
+    BufCnt++;
+    if (BufCnt >= hostToMcu.messageBodySize)
+    {
+      State = 4;
+    }
+    break;
     case 4:
         printf("case4, checksum 0x%x, datain 0x%x\r\n", hostToMcu.checkSum, u8KeyIn);
         if (u8KeyIn == hostToMcu.checkSum)
@@ -962,7 +961,10 @@ static void udp_client_task(void *pvParameters)
     uart_event_t event;
     uint8_t *dtmp = (uint8_t *) malloc(RD_BUF_SIZE);
     uint8_t *gps_hr_chunck_data = (uint8_t *) malloc(256);
+    uint8_t *hr_data_to_mcu = (uint8_t *) malloc(4);
     memset(gps_hr_chunck_data, 0, 256);
+    memset(hr_data_to_mcu, 0, 4);
+
     // char udp_server_ip[16];
     // char wifi_client_ip[16];
     // char wifi_ssid[16];
@@ -973,7 +975,6 @@ static void udp_client_task(void *pvParameters)
     // printf("%d\n", nvs_read_u8("is_written", nvs_handle));
     // nvs_write_u8("is_written", 0, nvs_handle);
     // printf("%d\n", nvs_read_u8("is_written", nvs_handle));
-
 
     // vTaskDelay(10000000/portTICK_PERIOD_MS);
 
@@ -993,10 +994,12 @@ static void udp_client_task(void *pvParameters)
                     uart_write_bytes(ESP_COMMU_UART, (const char *) dtmp, event.size);
                     // printf("%s\n", (const char*)dtmp);
 
+                    // TODO: find min length of configuration data
+                    
                     if (event.size == 77 && !wifi_ble_config_processing_done_flag)
                     {
                         wifi_ble_config_processing_done_flag = 1;
-                        ESP_LOGE(TAG, "((((((((((((((((((((WIFI(UDP) & BLE Configuration !!!!)))))))))))))))");
+                        ESP_LOGE(TAG, "-------------------  WIFI(UDP) & BLE Configuration !!  -------------------");
                         for (int i = 0; i < event.size; i++)
                         {
                             hostUartParser(dtmp[i]);
@@ -1059,21 +1062,7 @@ static void udp_client_task(void *pvParameters)
                             nvs_write_u8("is_written", 1, nvs_handle);
                         }
 
-                        // if (!strcmp(nvs_read_str("udp_server_ip", nvs_handle), udp_server_ip)
-                        // || !strcmp(nvs_read_str("wifi_client_ip", nvs_handle), wifi_client_ip)
-                        // || !strcmp(nvs_read_str("wifi_ssid", nvs_handle), wifi_ssid)
-                        // || !strcmp(nvs_read_str("ble_device_name", nvs_handle), remote_device_name))
-                        // {
-                        //     ESP_LOGI(TAG, "WIFI BLE config data change !");
-                        //     nvs_write_string("udp_server_ip", (char *)udp_server_ip, nvs_handle);
-                        //     nvs_write_string("wifi_client_ip", (char *)wifi_client_ip, nvs_handle);
-                        //     nvs_write_string("wifi_ssid", (char *)wifi_ssid, nvs_handle);
-                        //     nvs_write_string("ble_deive_name", (char *)remote_device_name, nvs_handle);
-                        // }
-
-                        // printf("check------------\n %s \n %s \n %s \n %s \n", nvs_read_str("udp_server_ip", nvs_handle), nvs_read_str("wifi_client_ip", nvs_handle), nvs_read_str("wifi_ssid", nvs_handle), nvs_read_str("ble_device_name", nvs_handle));
-
-
+       
                         for (int i = 0; i < 10; i++)
                         {
                             uart_write_bytes(ESP_COMMU_UART, (const char*)ESP_ACK_OK, sizeof(ESP_ACK_OK)*2);
@@ -1088,17 +1077,19 @@ static void udp_client_task(void *pvParameters)
 
                         // ESP_LOGI(TAG, "BLE Task Start !");
 
-                        printf("jaeuk 1 %c \n", string_ble_name_buf[0]);
-                        printf("jaeuk 2 %c \n", string_ble_name_buf[1]);
-                        printf("jaeuk 3 %c \n", string_ble_name_buf[2]);
+                        printf("jaeuk 11 %c \n", string_ble_name_buf[0]);
+                        printf("jaeuk 22 %c \n", string_ble_name_buf[1]);
+                        printf("jaeuk 33 %c \n", string_ble_name_buf[2]);
 
+                        // TODO : if ble name size zero, won't turn on ble task.
+                        printf("ble str len = %d \n", strlen(string_ble_name_buf));
 
-                        if (string_ble_name_buf[0] == 'P' && string_ble_name_buf[1] == 'o' && string_ble_name_buf[2] == 'l')
+                        if (strlen(string_ble_name_buf) != 0)
                         {
                             ESP_LOGI(TAG, "BLE Task Start !");
                             xTaskCreate(ble_hr_task, "ble_client", 4096, NULL, 5, NULL);    
                         }
-                        // xTaskCreate(ble_hr_task, "ble_client", 4096, NULL, 5, NULL);
+
                         vTaskDelay(2000/portTICK_PERIOD_MS);
 
                         reset_flag = 0;
@@ -1119,14 +1110,16 @@ static void udp_client_task(void *pvParameters)
                             xTaskCreate(wifi_connect_manager, "wifi_connect", 4096, NULL, 5, NULL);
                             vTaskDelay(2000/portTICK_PERIOD_MS);
 
-
                             
                             // printf("BLE config name check = %s", remote_device_name);
                             printf("jaeuk 1 %c \n", remote_device_name[0]);
                             printf("jaeuk 2 %c \n", remote_device_name[1]);
                             printf("jaeuk 3 %c \n", remote_device_name[2]);
 
-                            if (remote_device_name[0] == 'P' && remote_device_name[1] == 'o' && remote_device_name[2] == 'l')
+                            // TODO : if ble name size zero, won't turn on ble task.
+                            // if (strlen(string_ble_name_buf != 0))
+                            printf("ble str len --2--= %d \n", strlen(remote_device_name));
+                            if (strlen(remote_device_name) != 0)
                             {
                                 ESP_LOGI(TAG, "BLE Task Start !");
                                 xTaskCreate(ble_hr_task, "ble_client", 4096, NULL, 5, NULL);    
@@ -1137,22 +1130,7 @@ static void udp_client_task(void *pvParameters)
 
                             reset_flag = 0;
                         }
-                        
-                        
-                        // for (int i=0; i<22; i++)
-                        // {
-                        //     gps_hr_chunck_data[i + offset] = dtmp[i];
-                        //     printf("%x", gps_hr_chunck_data[i + offset]);
-                        // }
-                        
-                        // printf("\r\n");
-
-                        // if (strcmp((const char*)ble_hr_share_val, "0") == 0)
-                        // {
-                        //     printf("BLE hr data 0  set -\n");
-                        //     sprintf(ble_hr_share_val, "%s", "-");
-                        // }
-                        // char a[2] = "d";
+ 
 
                         for (int i=0; i<22; i++)
                         {
@@ -1161,18 +1139,10 @@ static void udp_client_task(void *pvParameters)
                         }
                         
                         // printf("\r\n");
-                        
 
                         gps_hr_chunck_data[22 + offset] = ble_hr_share_val;
                         gps_hr_chunck_data[23 + offset] = '\n';
 
-                        // printf("--------check here-------\n");
-                        // for (int i=0; i<24; i++)
-                        // {
-                        //     // gps_hr_chunck_data[i + offset] = dtmp[i];
-                        //     printf("%x", gps_hr_chunck_data[i + offset]);
-                        // }
-                        // printf("\n--------check end-------\n"); 
                         
                         offset += 24;
                         data_integ_cnt ++;
@@ -1185,11 +1155,34 @@ static void udp_client_task(void *pvParameters)
                             ESP_LOGI(TAG, "@@@@@@@@@@@ heap3 is %u", heap_caps_get_free_size(MALLOC_CAP_8BIT));
                             // printf("length of udp data = %d \n", strlen((const char*)gps_hr_chunck_data));
                             udp_msg_sent((const char *)udp_server_ip ,(const char *)gps_hr_chunck_data);
+
+                            hr_data_to_mcu[0] = 'H';
+                            hr_data_to_mcu[1] = 'R';
+                            hr_data_to_mcu[2] =  ble_hr_share_val;
+                            hr_data_to_mcu[3] = '\n';
+
+                            printf("Check ESP -> MCU HR data uart1 = %s \n", (const char*)hr_data_to_mcu);
+
+                            for (int k = 0; k < 5; k++)
+                            {
+                                uart_write_bytes(ESP_COMMU_UART, (const char *) hr_data_to_mcu, 4);
+                                vTaskDelay(10/portTICK_PERIOD_MS);
+                            }
+                            
                             memset(gps_hr_chunck_data, 0, 256);
+                            memset(hr_data_to_mcu, 0, 4);
                             data_integ_cnt = 0;
                             offset = 0;
                         }
                         
+                    }
+                    // TODO : add nvs flash erase process from st mcu command 
+                    else if (event.size == 5)
+                    {
+                        printf("Erase WIFI & BLE configuration information \n");
+                        // is_written change & erase nvs flash reset
+                        nvs_flash_erase();
+                        esp_restart();
                     }
                     else
                     {
