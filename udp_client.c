@@ -700,8 +700,8 @@ void wifi_init_sta(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(TAG, "----------WiFi power save mode start-----------\n");
-    esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+    // ESP_LOGI(TAG, "----------WiFi power save mode start-----------\n");
+    // esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
 
     ESP_LOGI(TAG, "wifi_init_sta finished.");
 
@@ -780,8 +780,8 @@ static void udp_msg_sent(char *server_ip, char *payload)
     }
     ESP_LOGI(TAG, "Socket created, sending to %s:%d", HOST_IP_ADDR, PORT);
 
-    
-
+    // jaeuk : test size change
+    // int err = sendto(sock, payload, 80, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
     int err = sendto(sock, payload, 240, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
     if (err < 0) {
         ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
@@ -872,6 +872,11 @@ static void ble_main(void)
     esp_err_t local_mtu_ret = esp_ble_gatt_set_local_mtu(500);
     if (local_mtu_ret){
         ESP_LOGE(GATTC_TAG, "set local  MTU failed, error code = %x", local_mtu_ret);
+    }
+    ret = esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_N12);
+    if (ret) {
+        ESP_LOGE(GATTC_TAG, "%s eesp_ble_tx_power_set failed: %s\n", __func__, esp_err_to_name(ret));
+        return;
     }
 
  
@@ -984,18 +989,8 @@ static void udp_client_task(void *pvParameters)
     memset(gps_hr_chunck_data, 0, 256);
     memset(hr_data_to_mcu, 0, 4);
 
-    // char udp_server_ip[16];
-    // char wifi_client_ip[16];
-    // char wifi_ssid[16];
-    // char remote_device_name[24];
-
-    // printf("%d\n", nvs_read_u8("is_written", nvs_handle));
-    // nvs_write_u8("is_written", 1, nvs_handle);
-    // printf("%d\n", nvs_read_u8("is_written", nvs_handle));
-    // nvs_write_u8("is_written", 0, nvs_handle);
-    // printf("%d\n", nvs_read_u8("is_written", nvs_handle));
-
-    // vTaskDelay(10000000/portTICK_PERIOD_MS);
+    uint8_t *gps_data_loss_test = (uint8_t *) malloc(80);
+    memset(gps_data_loss_test, 0, 80);
 
     for (;;) {
         if (xQueueReceive(uart0_queue, (void *)&event, (portTickType)portMAX_DELAY)) {
@@ -1108,7 +1103,7 @@ static void udp_client_task(void *pvParameters)
                             if (strlen(string_ble_name_buf) != 0)
                             {
                                 ESP_LOGI(TAG, "BLE Task Start !");
-                                // xTaskCreate(ble_hr_task, "ble_client", 4096, NULL, 5, NULL);
+                                xTaskCreate(ble_hr_task, "ble_client", 4096, NULL, 5, NULL);
                             }
 
                             vTaskDelay(2000/portTICK_PERIOD_MS);
@@ -1117,31 +1112,6 @@ static void udp_client_task(void *pvParameters)
 
                             reset_flag = 0;
                         }
-
-       
-
-                        // ESP_LOGI(TAG, "WIFI Task Start !");
-
-                        // xTaskCreate(wifi_connect_manager, "wifi_connect", 4096, NULL, 5, NULL);
-                        // vTaskDelay(2000/portTICK_PERIOD_MS);
-
-                        // // ESP_LOGI(TAG, "BLE Task Start !");
-
-                        // printf("jaeuk 11 %c \n", string_ble_name_buf[0]);
-                        // printf("jaeuk 22 %c \n", string_ble_name_buf[1]);
-                        // printf("jaeuk 33 %c \n", string_ble_name_buf[2]);
-
-                        // // TODO : if ble name size zero, won't turn on ble task.
-                        // printf("ble str len = %d \n", strlen(string_ble_name_buf));
-
-                        // if (strlen(string_ble_name_buf) != 0)
-                        // {
-                        //     ESP_LOGI(TAG, "BLE Task Start !");
-                        //     xTaskCreate(ble_hr_task, "ble_client", 4096, NULL, 5, NULL);
-                        // }
-
-                        // vTaskDelay(2000/portTICK_PERIOD_MS);
-
                         
                     }
                     else if (event.size == 22)
@@ -1177,10 +1147,9 @@ static void udp_client_task(void *pvParameters)
                             if (strlen(remote_device_name) != 0)
                             {
                                 ESP_LOGI(TAG, "BLE Task Start !");
-                                // xTaskCreate(ble_hr_task, "ble_client", 4096, NULL, 5, NULL);
+                                xTaskCreate(ble_hr_task, "ble_client", 4096, NULL, 5, NULL);
                             }
 
-                            // xTaskCreate(ble_hr_task, "ble_client", 4096, NULL, 5, NULL);
                             vTaskDelay(2000/portTICK_PERIOD_MS);
 
                             reset_flag = 0;
@@ -1204,6 +1173,11 @@ static void udp_client_task(void *pvParameters)
 
                         if (data_integ_cnt == 10)
                         {
+
+                            // jaeuk : add 720 data size send process
+                            // First 2 seconds save 480 data and send 720 data it comes 3 seconds
+                            // Totaly 4 data buffer need(data 1 + data 2 + data 3 / current data save buffer)
+                            
                             printf("UDP data send here!!!!!!!!!!!!!!!!\n");
                             printf("--------- HR data : %d --------\n", ble_hr_share_val);
                             printf("%s\n", (const char*)gps_hr_chunck_data);
@@ -1270,6 +1244,17 @@ static void udp_client_task(void *pvParameters)
                         // is_written change & erase nvs flash reset
                         nvs_flash_erase();
                         esp_restart();
+                    }
+                    else if (event.size == 80)
+                    {
+                        for (int i=0; i<80; i++)
+                        {
+                            gps_data_loss_test[i] = dtmp[i];
+                            printf("%c\n", gps_data_loss_test[i]);
+                        }
+                        printf("********** %s **********\n", gps_data_loss_test);
+                        printf("Send data loss check data ~ ! \n");
+                        udp_msg_sent((const char *)udp_server_ip ,(const char *)gps_data_loss_test);
                     }
                     else
                     {
@@ -1338,6 +1323,7 @@ void app_main(void)
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
+        // .use_ref_tick = true
     };
 
     uart_param_config(ESP_COMMU_UART, &uart_config);
@@ -1346,23 +1332,23 @@ void app_main(void)
     // Install UART driver, and get the queue.
     uart_driver_install(ESP_COMMU_UART, UART_BUF_SIZE * 2, UART_BUF_SIZE * 2, 100, &uart0_queue, 0);
 
-    #if CONFIG_PM_ENABLE
-        // Configure dynamic frequency scaling:
-        // maximum and minimum frequencies are set in sdkconfig,
-        // automatic light sleep is enabled if tickless idle support is enabled.
-    #if CONFIG_IDF_TARGET_ESP32
-        esp_pm_config_esp32_t pm_config = {
-    #elif CONFIG_IDF_TARGET_ESP32S2
-        esp_pm_config_esp32s2_t pm_config = {
-    #endif
-                .max_freq_mhz = 80,
-                .min_freq_mhz = 80,
-    #if CONFIG_FREERTOS_USE_TICKLESS_IDLE
-                .light_sleep_enable = true
-    #endif
-        };
-        ESP_ERROR_CHECK( esp_pm_configure(&pm_config));
-    #endif // CONFIG_PM_ENABLE
+    // #if CONFIG_PM_ENABLE
+    //     // Configure dynamic frequency scaling:
+    //     // maximum and minimum frequencies are set in sdkconfig,
+    //     // automatic light sleep is enabled if tickless idle support is enabled.
+    // #if CONFIG_IDF_TARGET_ESP32
+    //     esp_pm_config_esp32_t pm_config = {
+    // #elif CONFIG_IDF_TARGET_ESP32S2
+    //     esp_pm_config_esp32s2_t pm_config = {
+    // #endif
+    //             .max_freq_mhz = 80,
+    //             .min_freq_mhz = 80,
+    // #if CONFIG_FREERTOS_USE_TICKLESS_IDLE
+    //             .light_sleep_enable = true
+    // #endif
+    //     };
+    //     ESP_ERROR_CHECK( esp_pm_configure(&pm_config));
+    // #endif // CONFIG_PM_ENABLE
 
     xTaskCreate(udp_client_task, "udp_client", 8192, NULL, 5, NULL);
     // xTaskCreate(ble_hr_task, "ble_client", 4096, NULL, 5, NULL);
