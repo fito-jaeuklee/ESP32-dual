@@ -33,6 +33,9 @@
 #include "esp_gatt_common_api.h"
 #include "driver/uart.h"
 #include "driver/gpio.h"
+#include "esp_ota_ops.h"
+#include "esp_http_client.h"
+#include "esp_https_ota.h"
 
 #include "protocol_examples_common.h"
 
@@ -80,6 +83,7 @@ static const char *ESP_CONFIG_START = "START";
 static const char *ESP_CONFIG_START_OK_STM = "OK";
 static const char *ESP_WIFI_DISCONNECTED = "FAIL\n";
 static const char *ESP_WIFI_CONNECTED = "CONNECTED\n";
+static const char *OTA_DOWNLOAD_URL = "http://192.168.0.254:8070/esp32.bin";
 
 static bool ble_connect    = false;
 static bool get_server = false;
@@ -101,6 +105,87 @@ typedef struct {
 } tSerialMessageFormat; //Serial Data Format
 tSerialMessageFormat mcuToHost;
 tSerialMessageFormat hostToMcu;
+
+//yong_jun: change tx payload size
+uint8_t  tx_payload_buffer[720];
+uint16_t tx_payload_length = 715;
+
+// new input data position [650].
+static int add_tx_packet(uint8_t *data_prt, int cnt)
+{
+	static uint16_t  position  =0;
+	static uint8_t first_done = 0;
+	int input_length = 65;
+	uint16_t next_position=0;
+
+	if(first_done == 0)
+	{
+		first_done = 1;
+		memmove(&tx_payload_buffer[0], data_prt, input_length); // save new input data.
+		return 0;
+	}
+// 11�� ���� �� ������ �̵� �ʿ� ��. 
+	if(cnt > 10)
+	{	
+		// ���� ������ �̵�. 
+		// 	[65] = [0]
+		//	[130] = [65]
+		//	[195] = [130]
+		//	.....
+		// 	[650] = [585]
+		for(int k=1; k<11; k++) 
+		{
+			memmove(&tx_payload_buffer[next_position], &tx_payload_buffer[input_length*k], input_length); // ���� ������ �̵�.
+			next_position = k*input_length;
+		}
+		memmove(&tx_payload_buffer[650], data_prt, input_length);  // move data.
+	}
+	else
+	{
+		position = (input_length*cnt); // position : 65	130	195	260	325	390	455	520	585	650	715
+		memmove(&tx_payload_buffer[position], data_prt, input_length); // ���ο� ������ ����.
+	}
+	return 1;
+}
+
+static int add_tx_packet_with_gps_coordinate(uint8_t *data_prt, int cnt)
+{
+	static uint16_t  position  =0;
+	static uint8_t first_done = 0;
+	int input_length = 120;
+	uint16_t next_position=0;
+
+	if(first_done == 0)
+	{
+		first_done = 1;
+		memmove(&tx_payload_buffer[0], data_prt, input_length); // save new input data.
+		return 0;
+	}
+// 6�� ���� �� ������ �̵� �ʿ� ��. 
+	if(cnt > 5)
+	{	
+		// ���� ������ �̵�. 
+		// 	[120] = [0]
+		//	[240] = [120]
+		//	[360] = [240]
+		//	.....
+		// 	[600] = [480]
+		for(int k=1; k<6; k++) 
+		{
+			memmove(&tx_payload_buffer[next_position], &tx_payload_buffer[input_length*k], input_length); // move data.
+			next_position = k*input_length;
+		}
+		memmove(&tx_payload_buffer[600], data_prt, input_length); // ���ο� ������ ����.
+	}
+	else
+	{
+		position = (input_length*cnt); // position : 120	240 360 480 600 720 
+		memmove(&tx_payload_buffer[position], data_prt, input_length); // ���ο� ������ ����.
+	}
+
+	
+	return 1;
+}
 
 
 esp_err_t nvs_write_string(const char *key, const char *value, nvs_handle nvs_handle) {
@@ -634,6 +719,53 @@ static void event_handler(void* arg, esp_event_base_t event_base,
     }
 }
 
+
+esp_err_t _http_event_handler(esp_http_client_event_t *evt)
+{
+    switch(evt->event_id) {
+        case HTTP_EVENT_ERROR:
+            ESP_LOGD(__ESP_FILE__, "HTTP_EVENT_ERROR");
+            break;
+        case HTTP_EVENT_ON_CONNECTED:
+            ESP_LOGD(__ESP_FILE__, "HTTP_EVENT_ON_CONNECTED");
+            break;
+        case HTTP_EVENT_HEADER_SENT:
+            ESP_LOGD(__ESP_FILE__, "HTTP_EVENT_HEADER_SENT");
+            break;
+        case HTTP_EVENT_ON_HEADER:
+            ESP_LOGD(__ESP_FILE__, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+            break;
+        case HTTP_EVENT_ON_DATA:
+            ESP_LOGD(__ESP_FILE__, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
+            break;
+        case HTTP_EVENT_ON_FINISH:
+            ESP_LOGD(__ESP_FILE__, "HTTP_EVENT_ON_FINISH");
+            break;
+        case HTTP_EVENT_DISCONNECTED:
+            ESP_LOGD(__ESP_FILE__, "HTTP_EVENT_DISCONNECTED");
+            break;
+    }
+    return ESP_OK;
+}
+
+void start_http_ota(char *downlodad_url) {
+    ESP_LOGI(__ESP_FILE__, "---------- Start firmware update ! ----------");
+
+    esp_http_client_config_t config = {
+        .url = downlodad_url,
+        .event_handler = _http_event_handler,
+    };
+    esp_err_t ret = esp_https_ota(&config);
+    if (ret == ESP_OK) {
+        printf("< OTA Update done ! ----------> Reboot ESP > \n ");
+        vTaskDelay(3000 / portTICK_PERIOD_MS);
+        esp_restart();
+    } else {
+      //TODO(jaeuk) : If fail FW update, how to response app & server?
+      ESP_LOGE(__ESP_FILE__, "Firmware Upgrades Failed");
+    }
+}
+
 void wifi_init_sta(void)
 {
     // char wifi_client_ip[16];
@@ -780,9 +912,11 @@ static void udp_msg_sent(char *server_ip, char *payload)
     }
     ESP_LOGI(TAG, "Socket created, sending to %s:%d", HOST_IP_ADDR, PORT);
 
-    // jaeuk : test size change
-    // int err = sendto(sock, payload, 80, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
-    int err = sendto(sock, payload, 240, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+    
+//yong_jun : change tx length.
+    int err = sendto(sock, payload, tx_payload_length, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));	
+//    int err = sendto(sock, payload, 240, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+	
     if (err < 0) {
         ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
     }
@@ -980,6 +1114,10 @@ static void udp_client_task(void *pvParameters)
 
     int receive_ok_from_mcu = 0;
     int data_integ_cnt = 0;
+   //yong_jun: 	
+    static int16_t indata_counter_by_mcu =0;
+    static int run_ble_task =0;
+  // end	
     
     int wifi_ble_config_processing_done_flag = 0;
     uart_event_t event;
@@ -988,9 +1126,6 @@ static void udp_client_task(void *pvParameters)
     uint8_t *hr_data_to_mcu = (uint8_t *) malloc(4);
     memset(gps_hr_chunck_data, 0, 256);
     memset(hr_data_to_mcu, 0, 4);
-
-    uint8_t *gps_data_loss_test = (uint8_t *) malloc(80);
-    memset(gps_data_loss_test, 0, 80);
 
     for (;;) {
         if (xQueueReceive(uart0_queue, (void *)&event, (portTickType)portMAX_DELAY)) {
@@ -1102,19 +1237,18 @@ static void udp_client_task(void *pvParameters)
 
                             if (strlen(string_ble_name_buf) != 0)
                             {
+                            //yong jun: check ble task
+                                run_ble_task = 1;
                                 ESP_LOGI(TAG, "BLE Task Start !");
                                 xTaskCreate(ble_hr_task, "ble_client", 4096, NULL, 5, NULL);
                             }
-
-                            vTaskDelay(2000/portTICK_PERIOD_MS);
-                            
+                            vTaskDelay(2000/portTICK_PERIOD_MS);                            
                             nvs_write_u8("is_written", 1, nvs_handle);
-
                             reset_flag = 0;
                         }
                         
                     }
-                    else if (event.size == 22)
+                    else if (event.size == 11 ||event.size == 22)	// yong jun: sent 11 or 22 byte by mcu 
                     {
                         if (nvs_read_u8("is_written", nvs_handle) && reset_flag)
                         {
@@ -1154,58 +1288,89 @@ static void udp_client_task(void *pvParameters)
 
                             reset_flag = 0;
                         }
- 
-
-                        for (int i=0; i<22; i++)
+			//yong_jun
+			// no gps coordinator 
+			if(event.size == 11) 
                         {
-                            gps_hr_chunck_data[i + offset] = dtmp[i];
-                            // printf("%x", gps_hr_chunck_data[i + offset]);
-                        }
-                        
-                        // printf("\r\n");
-
-                        gps_hr_chunck_data[22 + offset] = ble_hr_share_val;
-                        gps_hr_chunck_data[23 + offset] = '\n';
-
-                        
-                        offset += 24;
+	                       for (int i=0; i<11; i++) //gps_hr_chunck_data[10] ,11byte. 
+	                        {
+	                            gps_hr_chunck_data[i + offset] = dtmp[i];
+	                        }
+				// �ɹ� ������ �߰� �ʿ� 
+				gps_hr_chunck_data[11+offset] = ble_hr_share_val;
+				gps_hr_chunck_data[12+offset] = '\n';
+				offset += 13; // 715 byte	
+			}
+			else if(event.size == 22)
+			{
+				for (int i=0; i<22; i++) //gps_hr_chunck_data[10] 
+	                        {
+	                            gps_hr_chunck_data[i + offset] = dtmp[i];
+	                        }
+ 				gps_hr_chunck_data[22 + offset] = ble_hr_share_val;
+ 				gps_hr_chunck_data[23 + offset] = '\n';
+ 				offset += 24;	
+			}
+			
                         data_integ_cnt ++;
-
-                        if (data_integ_cnt == 10)
+                        if (data_integ_cnt == 5) // yong jun : GPS 5hz. call 5 times in a sec 
                         {
-
-                            // jaeuk : add 720 data size send process
-                            // First 2 seconds save 480 data and send 720 data it comes 3 seconds
-                            // Totaly 4 data buffer need(data 1 + data 2 + data 3 / current data save buffer)
-                            
-                            printf("UDP data send here!!!!!!!!!!!!!!!!\n");
-                            printf("--------- HR data : %d --------\n", ble_hr_share_val);
-                            printf("%s\n", (const char*)gps_hr_chunck_data);
                             ESP_LOGI(TAG, "@@@@@@@@@@@ heap3 is %u", heap_caps_get_free_size(MALLOC_CAP_8BIT));
                             // printf("length of udp data = %d \n", strlen((const char*)gps_hr_chunck_data));
-                            udp_msg_sent((const char *)udp_server_ip ,(const char *)gps_hr_chunck_data);
-
-                            hr_data_to_mcu[0] = 'H';
-                            hr_data_to_mcu[1] = 'R';
-                            hr_data_to_mcu[2] =  ble_hr_share_val;
-                            hr_data_to_mcu[3] = '\n';
-
-
-
-                            printf("Check ESP -> MCU HR data uart1 = %s \n", (const char*)hr_data_to_mcu);
-
-                            for (int k = 0; k < 5; k++)
-                            {
-                                uart_write_bytes(ESP_COMMU_UART, (const char *) hr_data_to_mcu, 4);
-                                vTaskDelay(10/portTICK_PERIOD_MS);
+                            //yong jun : add sent data by mcu
+                            if(event.size == 11)
+			    {
+			    	add_tx_packet(&gps_hr_chunck_data[0], indata_counter_by_mcu);
+				tx_payload_length = 715;	
                             }
-                            
+			    else if(event.size == 22){
+				add_tx_packet_with_gps_coordinate(&gps_hr_chunck_data[0], indata_counter_by_mcu);
+				tx_payload_length = 720;
+			    }
+			    indata_counter_by_mcu++;
+			    if(event.size == 11 && indata_counter_by_mcu>10)
+			    {
+			    /*
+				printf("UDP data send [muc 11 byte]\r\n");
+				for(int k=0; k<715; k++)
+				{
+					printf("%c",tx_payload_buffer[k]);
+				}
+			    */
+                            	udp_msg_sent((const char *)udp_server_ip ,(const char *)tx_payload_buffer);
+			    }
+			    else if(event.size == 22 && indata_counter_by_mcu>5)
+			    {
+			       /*
+				printf("UDP data send [muc 22 byte]\r\n");
+				for(int k=0; k<720; k++)
+				{
+					printf("%c",tx_payload_buffer[k]);
+				}
+				*/
+                            	udp_msg_sent((const char *)udp_server_ip ,(const char *)tx_payload_buffer);
+			    }
+			    if(run_ble_task)
+			    {
+	                            hr_data_to_mcu[0] = 'H';
+	                            hr_data_to_mcu[1] = 'R';
+	                            hr_data_to_mcu[2] =  ble_hr_share_val;
+	                            hr_data_to_mcu[3] = '\n';
+	                            // printf("Check ESP -> MCU HR data uart1 = %s \n", (const char*)hr_data_to_mcu);
+
+	                            for (int k = 0; k < 5; k++)
+	                            {
+	                                uart_write_bytes(ESP_COMMU_UART, (const char *) hr_data_to_mcu, 4);
+	                                vTaskDelay(10/portTICK_PERIOD_MS);
+	                            }	                            
+			    }
+				
                             memset(gps_hr_chunck_data, 0, 256);
                             memset(hr_data_to_mcu, 0, 4);
                             data_integ_cnt = 0;
                             offset = 0;
                         }
-                        
+                        // end
                     }
                     // TODO : add nvs flash erase process from st mcu command 
                     else if (event.size == 6 && dtmp[0] == 'S' && dtmp[1] == 'T' && dtmp[2] == 'A')
@@ -1245,16 +1410,9 @@ static void udp_client_task(void *pvParameters)
                         nvs_flash_erase();
                         esp_restart();
                     }
-                    else if (event.size == 80)
+                    else if (event.size == 9 && dtmp[0] == 'O' && dtmp[1] == 'T' && dtmp[2] == 'A' && dtmp[3] == 'U' )
                     {
-                        for (int i=0; i<80; i++)
-                        {
-                            gps_data_loss_test[i] = dtmp[i];
-                            printf("%c\n", gps_data_loss_test[i]);
-                        }
-                        printf("********** %s **********\n", gps_data_loss_test);
-                        printf("Send data loss check data ~ ! \n");
-                        udp_msg_sent((const char *)udp_server_ip ,(const char *)gps_data_loss_test);
+                        start_http_ota(OTA_DOWNLOAD_URL);
                     }
                     else
                     {
@@ -1323,7 +1481,6 @@ void app_main(void)
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
-        // .use_ref_tick = true
     };
 
     uart_param_config(ESP_COMMU_UART, &uart_config);
@@ -1332,23 +1489,23 @@ void app_main(void)
     // Install UART driver, and get the queue.
     uart_driver_install(ESP_COMMU_UART, UART_BUF_SIZE * 2, UART_BUF_SIZE * 2, 100, &uart0_queue, 0);
 
-    // #if CONFIG_PM_ENABLE
-    //     // Configure dynamic frequency scaling:
-    //     // maximum and minimum frequencies are set in sdkconfig,
-    //     // automatic light sleep is enabled if tickless idle support is enabled.
-    // #if CONFIG_IDF_TARGET_ESP32
-    //     esp_pm_config_esp32_t pm_config = {
-    // #elif CONFIG_IDF_TARGET_ESP32S2
-    //     esp_pm_config_esp32s2_t pm_config = {
-    // #endif
-    //             .max_freq_mhz = 80,
-    //             .min_freq_mhz = 80,
-    // #if CONFIG_FREERTOS_USE_TICKLESS_IDLE
-    //             .light_sleep_enable = true
-    // #endif
-    //     };
-    //     ESP_ERROR_CHECK( esp_pm_configure(&pm_config));
-    // #endif // CONFIG_PM_ENABLE
+    #if CONFIG_PM_ENABLE
+        // Configure dynamic frequency scaling:
+        // maximum and minimum frequencies are set in sdkconfig,
+        // automatic light sleep is enabled if tickless idle support is enabled.
+    #if CONFIG_IDF_TARGET_ESP32
+        esp_pm_config_esp32_t pm_config = {
+    #elif CONFIG_IDF_TARGET_ESP32S2
+        esp_pm_config_esp32s2_t pm_config = {
+    #endif
+                .max_freq_mhz = 80,
+                .min_freq_mhz = 80,
+    #if CONFIG_FREERTOS_USE_TICKLESS_IDLE
+                .light_sleep_enable = true
+    #endif
+        };
+        ESP_ERROR_CHECK( esp_pm_configure(&pm_config));
+    #endif // CONFIG_PM_ENABLE
 
     xTaskCreate(udp_client_task, "udp_client", 8192, NULL, 5, NULL);
     // xTaskCreate(ble_hr_task, "ble_client", 4096, NULL, 5, NULL);
