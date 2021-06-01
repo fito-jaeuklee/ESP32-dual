@@ -724,8 +724,9 @@ static void event_handler(void* arg, esp_event_base_t event_base,
             wifi_connection_flag = 0;
             esp_wifi_connect();
             s_retry_num++;
-            ESP_LOGI(TAG, "retry to connect to the AP");
+            ESP_LOGI(TAG, "retry to connect to the AP --- %d", sec_tick_by_mcu);
 	    // yongjun : time out 20minute and esp32 sleep. only first power on. if wifi_connection_flag =1, re-connection state...
+
 	    if(sec_tick_by_mcu >= (20*60) && (wifi_connection_flag ==0))
 	    {
 	        ESP_LOGI(TAG, "ESP32 Deep Sleep Mode : %d", sec_tick_by_mcu);	
