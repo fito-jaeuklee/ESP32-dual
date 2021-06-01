@@ -697,7 +697,7 @@ static const char *TAG = "example";
 
 #define EXAMPLE_ESP_WIFI_SSID      "FITO2"
 #define EXAMPLE_ESP_WIFI_PASS      "fito2021"
-#define EXAMPLE_ESP_MAXIMUM_RETRY  1000  // about 3sce, 1000 x 3sec = 3000 sec = 50 minute
+#define EXAMPLE_ESP_MAXIMUM_RETRY  380  // about 3sce, 1000 x 3sec = 3000 sec = 50 minute
 
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
@@ -724,22 +724,17 @@ static void event_handler(void* arg, esp_event_base_t event_base,
             wifi_connection_flag = 0;
             esp_wifi_connect();
             s_retry_num++;
-            ESP_LOGI(TAG, "retry to connect to the AP --- %d", sec_tick_by_mcu);
-	    // yongjun : time out 20minute and esp32 sleep. only first power on. if wifi_connection_flag =1, re-connection state...
+            ESP_LOGI(TAG, "retry to connect to the AP --- %d", s_retry_num);
 
-	    if(sec_tick_by_mcu >= (20*60) && (wifi_connection_flag ==0))
-	    {
-	        ESP_LOGI(TAG, "ESP32 Deep Sleep Mode : %d", sec_tick_by_mcu);	
-	    	esp_deep_sleep_start();
-	    }
-        } 
+        }
 	else {
             ESP_LOGE(TAG, "--- WIFI reconnection timeover ---");
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
             wifi_connection_flag = 0;
+            esp_deep_sleep_start();
         }
         ESP_LOGI(TAG,"connect to the AP fail");
-    } 
+    }
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
    {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
@@ -1159,7 +1154,7 @@ static void udp_client_task(void *pvParameters)
     memset(hr_data_to_mcu, 0, 4);
 
    //yongjun: FW version 
-     ESP_LOGE(TAG, "-------------------  ESP32 FW Version : 1.5.2 -------------------");
+     ESP_LOGE(TAG, "-------------------  ESP32 FW Version : 1.5.3 -------------------");
 
     for (;;) {
         if (xQueueReceive(uart0_queue, (void *)&event, (portTickType)portMAX_DELAY)) {
@@ -1345,8 +1340,7 @@ static void udp_client_task(void *pvParameters)
 			if (data_integ_cnt == 2) // yong jun : GPS 2hz. call 2 times in a sec
             		// if (data_integ_cnt == 5) //yong jun : GPS 5hz. call 5 times in a sec 
             		{
-            			sec_tick_by_mcu++;
-				// printf("sec_tick_by_mcu : %d %d \r\n", sec_tick_by_mcu, wifi_connection_flag);		
+				
                 		ESP_LOGI(TAG, "@@@@@@@@@@@ heap3 is %u", heap_caps_get_free_size(MALLOC_CAP_8BIT));
                 		// printf("length of udp data = %d \n", strlen((const char*)gps_hr_chunck_data));
                			 //yong jun : add sent data by mcu
