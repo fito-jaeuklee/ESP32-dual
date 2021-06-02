@@ -37,6 +37,7 @@
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
 #include "esp_sleep.h"
+#include "esp_timer.h"
 
 #include "protocol_examples_common.h"
 
@@ -81,6 +82,7 @@ static char wifi_client_ip[16];
 static char wifi_ssid[16];
 static char remote_device_name[24];
 static int wifi_connection_flag = 0;
+static uint64_t origin_wifi_timer;
 
 static const char *ESP_ACK_OK = "ESP32OK\n";
 static const char *ESP_CONFIG_START = "START";
@@ -715,12 +717,13 @@ static int s_retry_num = 0;
 static void event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
+
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } 
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) 
    {
-        if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY) {
+        if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY && (esp_timer_get_time() - origin_wifi_timer < 1200000000)) {
             wifi_connection_flag = 0;
             esp_wifi_connect();
             s_retry_num++;
@@ -728,7 +731,7 @@ static void event_handler(void* arg, esp_event_base_t event_base,
 
         }
 	else {
-            ESP_LOGE(TAG, "--- WIFI reconnection timeover ---");
+            ESP_LOGE(TAG, "--- WIFI reconnection 100 secs timeover ---");
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
             wifi_connection_flag = 0;
             esp_deep_sleep_start();
@@ -900,6 +903,8 @@ void wifi_init_sta(void)
 
 static void wifi_connect_manager(void *pvParameters)
 {
+    printf("^^^^^^^^^^^^wifi handler timer start^^^^^^^^^^^^^^^\n");
+    origin_wifi_timer = esp_timer_get_time();
     wifi_init_sta();
     vTaskDelete(NULL);
 }
