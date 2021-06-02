@@ -723,11 +723,11 @@ static void event_handler(void* arg, esp_event_base_t event_base,
     } 
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) 
    {
-        if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY && (esp_timer_get_time() - origin_wifi_timer < 1200000000)) {
+        if (esp_timer_get_time() - origin_wifi_timer < 1200000000) {
             wifi_connection_flag = 0;
             esp_wifi_connect();
             s_retry_num++;
-            ESP_LOGI(TAG, "retry to connect to the AP --- %d", s_retry_num);
+            ESP_LOGI(TAG, "retry to connect to the AP --- %lld", esp_timer_get_time());
 
         }
 	else {
@@ -1159,7 +1159,7 @@ static void udp_client_task(void *pvParameters)
     memset(hr_data_to_mcu, 0, 4);
 
    //yongjun: FW version 
-     ESP_LOGE(TAG, "-------------------  ESP32 FW Version : 1.5.3 -------------------");
+     ESP_LOGE(TAG, "-------------------  ESP32 FW Version : 1.6.0 -------------------");
 
     for (;;) {
         if (xQueueReceive(uart0_queue, (void *)&event, (portTickType)portMAX_DELAY)) {
