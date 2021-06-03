@@ -90,7 +90,7 @@ static const char *ESP_CONFIG_START = "START";
 static const char *ESP_CONFIG_START_OK_STM = "OK";
 static const char *ESP_WIFI_DISCONNECTED = "FAIL\n";
 static const char *ESP_WIFI_CONNECTED = "CONNECTED\n";
-static const char *OTA_DOWNLOAD_URL = "http://192.168.0.254:8070/esp32.bin";
+static const char *OTA_DOWNLOAD_URL = "http://192.168.1.254:8070/esp32.bin";
 
 static bool ble_connect    = false;
 static bool get_server = false;
@@ -1161,7 +1161,7 @@ static void udp_client_task(void *pvParameters)
     memset(hr_data_to_mcu, 0, 4);
 
    //yongjun: FW version 
-     ESP_LOGE(TAG, "-------------------  ESP32 FW Version : 1.6.1 -------------------");
+     ESP_LOGE(TAG, "-------------------  ESP32 FW Version : 1.6.2 -------------------");
 
     for (;;) {
         if (xQueueReceive(uart0_queue, (void *)&event, (portTickType)portMAX_DELAY)) {
