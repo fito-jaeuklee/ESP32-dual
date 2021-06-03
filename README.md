@@ -9,4 +9,7 @@
 *   partition~~.bin 
 *   udp_client.bin
 
+--소스코드
+
+udp_client.c
  을 포함 하여 릴리즈한다.
