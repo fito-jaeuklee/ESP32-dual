@@ -1161,7 +1161,7 @@ static void udp_client_task(void *pvParameters)
     memset(hr_data_to_mcu, 0, 4);
 
    //yongjun: FW version 
-     ESP_LOGE(TAG, "-------------------  ESP32 FW Version : 1.6.3 -------------------");
+     ESP_LOGE(TAG, "-------------------  ESP32 FW Version : 1.6.4 -------------------");
 
     for (;;) {
         if (xQueueReceive(uart0_queue, (void *)&event, (portTickType)portMAX_DELAY)) {
