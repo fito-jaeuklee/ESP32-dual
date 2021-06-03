@@ -81,6 +81,7 @@ static char udp_server_ip[16];
 static char wifi_client_ip[16];
 static char wifi_ssid[16];
 static char remote_device_name[24];
+static int first_wifi_connection_flag = 0;
 static int wifi_connection_flag = 0;
 static uint64_t origin_wifi_timer;
 
@@ -723,15 +724,15 @@ static void event_handler(void* arg, esp_event_base_t event_base,
     } 
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) 
    {
-        if (esp_timer_get_time() - origin_wifi_timer < 1200000000) {
+        if (first_wifi_connection_flag == 1 || esp_timer_get_time() - origin_wifi_timer < 1200000000) {
             wifi_connection_flag = 0;
             esp_wifi_connect();
             s_retry_num++;
-            ESP_LOGI(TAG, "retry to connect to the AP --- %lld", esp_timer_get_time());
+            ESP_LOGI(TAG, "retry to connect to the AP --- time : %lld, wifi first connection flag = %d", esp_timer_get_time(), first_wifi_connection_flag);
 
         }
 	else {
-            ESP_LOGE(TAG, "--- WIFI reconnection 100 secs timeover ---");
+            ESP_LOGE(TAG, "--- WIFI reconnection 20mins timeover -> deep sleep start ---");
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
             wifi_connection_flag = 0;
             esp_deep_sleep_start();
@@ -743,6 +744,7 @@ static void event_handler(void* arg, esp_event_base_t event_base,
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         wifi_connection_flag = 1;
+        first_wifi_connection_flag = 1;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
         // if s_retry_num 
         // udp_msg_sent();
@@ -1159,7 +1161,7 @@ static void udp_client_task(void *pvParameters)
     memset(hr_data_to_mcu, 0, 4);
 
    //yongjun: FW version 
-     ESP_LOGE(TAG, "-------------------  ESP32 FW Version : 1.6.0 -------------------");
+     ESP_LOGE(TAG, "-------------------  ESP32 FW Version : 1.6.1 -------------------");
 
     for (;;) {
         if (xQueueReceive(uart0_queue, (void *)&event, (portTickType)portMAX_DELAY)) {
