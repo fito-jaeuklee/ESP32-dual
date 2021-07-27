@@ -1,44 +1,47 @@
-/* BSD Socket API Example
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
+/* 
+Write by Fitogether [ Jeff Lee, Jaeuk Lee ]
 */
+
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include "nvs.h"
-#include <esp_heap_caps.h>
 
-#include <sys/param.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include "freertos/queue.h"
+
+#include <esp_heap_caps.h>
+#include <sys/param.h>
 #include "esp_system.h"
 #include "esp_wifi.h"
+#include "esp_netif.h"
 #include "esp_event.h"
 #include "esp_pm.h"
 #include "esp_log.h"
+
 #include "nvs_flash.h"
-#include "esp_netif.h"
+#include "nvs.h"
+
 #include "esp_bt.h"
 #include "esp_gap_ble_api.h"
 #include "esp_gattc_api.h"
 #include "esp_gatt_defs.h"
 #include "esp_bt_main.h"
 #include "esp_gatt_common_api.h"
+
 #include "driver/uart.h"
 #include "driver/gpio.h"
+
 #include "esp_ota_ops.h"
 #include "esp_http_client.h"
 #include "esp_https_ota.h"
+
 #include "esp_sleep.h"
 #include "esp_timer.h"
 
+// jaeuk : remove
 #include "protocol_examples_common.h"
 
 #include "lwip/err.h"
@@ -47,16 +50,17 @@
 #include <lwip/netdb.h>
 #include "addr_from_stdin.h"
 
-//yongjun:
-#include "esp_sleep.h"
+#define GPIO_OUTPUT_IO_0    18
+#define GPIO_OUTPUT_PIN_SEL  (1ULL<<GPIO_OUTPUT_IO_0)
 
 #define ESP_COMMU_UART UART_NUM_1
 #define EX_UART_NUM UART_NUM_0
 #define UART_BUF_SIZE (1024)
 #define RD_BUF_SIZE (UART_BUF_SIZE)
-static QueueHandle_t uart0_queue;
-static uint8_t ble_hr_share_val;
-static int offset = 0;
+
+#define DEFAULT_SCAN_LIST_SIZE 32
+#define WIFI_RSSI_FACTORY_TEST_AP_NAME "FITO2"
+// WIFI_RSSI_TESTER
 
 #define GATTC_TAG "JEFF:GATTC_DEMO"
 #define __ESP_FILE__ "nvs-manage"
@@ -66,8 +70,6 @@ static int offset = 0;
 
 //jeff: heart rate charateristic 
 #define REMOTE_NOTIFY_CHAR_UUID    0x2A37 //0xFF01
-
-
 #define PROFILE_NUM      1
 #define PROFILE_A_APP_ID 0
 #define INVALID_HANDLE   0
@@ -76,6 +78,10 @@ static int offset = 0;
 #define ECHO_TEST_RXD  (GPIO_NUM_16)
 #define ECHO_TEST_RTS  (UART_PIN_NO_CHANGE)
 #define ECHO_TEST_CTS  (UART_PIN_NO_CHANGE)
+
+static QueueHandle_t uart0_queue;
+static uint8_t ble_hr_share_val;
+static int offset = 0;
 
 static char udp_server_ip[16];
 static char wifi_client_ip[16];
@@ -86,9 +92,6 @@ static int wifi_connection_flag = 0;
 static uint64_t origin_wifi_timer;
 
 static const char *ESP_ACK_OK = "ESP32OK\n";
-static const char *ESP_CONFIG_START = "START";
-static const char *ESP_CONFIG_START_OK_STM = "OK";
-static const char *ESP_WIFI_DISCONNECTED = "FAIL\n";
 static const char *ESP_WIFI_CONNECTED = "CONNECTED\n";
 static const char *OTA_DOWNLOAD_URL = "http://192.168.1.254:8070/esp32.bin";
 
@@ -141,7 +144,7 @@ static int add_tx_packet_2hz(uint8_t *data_prt, int cnt)
 		//	[84] = [56]
 		//	.....
 		// 	[560] = [532]
-		for(int k=1; k<(10*2)+1; k++) 
+		for(int k=1; k<(10*2)+1; k++)
 		{
 			memmove(&tx_payload_buffer[next_position], &tx_payload_buffer[input_length*k], input_length); // move the existed data
 			next_position = k*input_length;
@@ -601,7 +604,7 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
             if (adv_name != NULL) {
                 if (strlen(remote_device_name) == adv_name_len && strncmp((char *)adv_name, remote_device_name, adv_name_len) == 0) {
                     // ESP_LOGI(GATTC_TAG, "searched device %s\n", remote_device_name);
-		    ESP_LOGI(GATTC_TAG, "================  find  ===============\n");
+		    ESP_LOGI(GATTC_TAG, "=============== Find my HR device  ===============\n");
 					
                     if (ble_connect == false) {
                         ble_connect = true;
@@ -615,7 +618,7 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
             }
             break;
         case ESP_GAP_SEARCH_INQ_CMPL_EVT:
-		ESP_LOGI(GATTC_TAG, "[[[[[[[[[[[  scan stop ]]]]]]]]]]]]]]]]]]\n");
+		ESP_LOGE(GATTC_TAG, "[[[[[[[[[[[[[[[[ BLE scan stop - Disable BLE ]]]]]]]]]]]]]]]] \n");
 		esp_bt_controller_disable();
             break; 
         default:
@@ -629,7 +632,7 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
             ESP_LOGE(GATTC_TAG, "scan stop failed, error status = %x", param->scan_stop_cmpl.status);
             break;
         }
-        ESP_LOGI(GATTC_TAG, "stop scan successfully");
+        ESP_LOGI(GATTC_TAG, "Stop ble scan successfully");
         break;
 
     case ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT:
@@ -780,7 +783,7 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
-void start_http_ota(char *downlodad_url) {
+void start_http_ota(const char *downlodad_url) {
     ESP_LOGI(__ESP_FILE__, "---------- Start firmware update ! ----------");
 
     esp_http_client_config_t config = {
@@ -797,6 +800,67 @@ void start_http_ota(char *downlodad_url) {
       ESP_LOGE(__ESP_FILE__, "Firmware Upgrades Failed");
     }
 }
+
+int wifi_scan(void)
+{
+    int found_ssid_flag = 0;
+    int matched_wifi_rssi_value = 0;
+    char ssid_selected[64];
+
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    esp_netif_t *sta_netif = esp_netif_create_default_wifi_sta();
+    assert(sta_netif);
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    uint16_t number = DEFAULT_SCAN_LIST_SIZE;
+    wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
+    uint16_t ap_count = 0;
+    memset(ap_info, 0, sizeof(ap_info));
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_ERROR_CHECK(esp_wifi_scan_start(NULL, true));
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
+    ESP_LOGI(TAG, "Total APs scanned = %u", ap_count);
+    for (int i = 0; (i < DEFAULT_SCAN_LIST_SIZE) && (i < ap_count); i++) {
+        ESP_LOGI(TAG, "SSID \t\t%s", ap_info[i].ssid);
+        ESP_LOGI(TAG, "RSSI \t\t%d", ap_info[i].rssi);
+        // print_auth_mode(ap_info[i].authmode);
+        // if (ap_info[i].authmode != WIFI_AUTH_WEP) {
+        //     print_cipher_type(ap_info[i].pairwise_cipher, ap_info[i].group_cipher);
+        // }
+        ESP_LOGI(TAG, "Channel \t\t%d\n", ap_info[i].primary);
+        for (int z =0; z<sizeof(ap_info[i].ssid); z++)
+        {
+            ssid_selected[z] = ap_info[i].ssid[z];
+        }
+        printf("--------------%s \n", ssid_selected);
+
+        if (!strcmp(ssid_selected, WIFI_RSSI_FACTORY_TEST_AP_NAME))
+        {
+            printf("Found matched SSID !!\n");
+            printf("Return matched WIFI RSSI\n");
+
+            esp_netif_deinit();
+            esp_event_loop_delete_default();
+            esp_netif_destroy(sta_netif);
+            esp_wifi_deinit();
+
+            return ap_info[i].rssi;       
+        }
+
+    }
+    esp_netif_deinit();
+    esp_event_loop_delete_default();
+    esp_netif_destroy(sta_netif);
+    esp_wifi_deinit();
+    return 0;
+}
+
 
 void wifi_init_sta(void)
 {
@@ -905,17 +969,15 @@ void wifi_init_sta(void)
 
 static void wifi_connect_manager(void *pvParameters)
 {
-    printf("^^^^^^^^^^^^wifi handler timer start^^^^^^^^^^^^^^^\n");
+    printf("^^^^^^^^^^^^ wifi handler timer start ^^^^^^^^^^^^^^^\n");
     origin_wifi_timer = esp_timer_get_time();
     wifi_init_sta();
     vTaskDelete(NULL);
 }
 
 
-static void udp_msg_sent(char *server_ip, char *payload)
+static void udp_msg_sent(const char *server_ip, const char *payload)
 {
-    char rx_buffer[128];
-    char host_ip = (char *)server_ip;
     int addr_family = 0;
     int ip_protocol = 0;
     int sendcnt = 0;
@@ -944,6 +1006,7 @@ static void udp_msg_sent(char *server_ip, char *payload)
     if (sock < 0) {
         ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
     }
+    // jaeuk : fix ip to real sent ip
     ESP_LOGI(TAG, "Socket created, sending to %s:%d", HOST_IP_ADDR, PORT);
 
     
@@ -1138,15 +1201,11 @@ int hostUartParser(unsigned int u8KeyIn)    //Host to Front Parser(Uart Parser)
 static void udp_client_task(void *pvParameters)
 {
     int reset_flag = 1;
-    int nvs_config_data_change_flag = 0;
-    int config_start_flag = 0;
-    // sprintf(ble_hr_share_val, "%s", "0");
 
     nvs_handle nvs_handle;
     
     ESP_ERROR_CHECK(nvs_open("WIFI_BLE_CONFIG", NVS_READWRITE, &nvs_handle));
 
-    int receive_ok_from_mcu = 0;
     int data_integ_cnt = 0;
    //yong_jun: 	
     static int16_t indata_counter_by_mcu =0;
@@ -1161,7 +1220,7 @@ static void udp_client_task(void *pvParameters)
     memset(hr_data_to_mcu, 0, 4);
 
    //yongjun: FW version 
-     ESP_LOGE(TAG, "-------------------  ESP32 FW Version : 1.6.4 -------------------");
+     ESP_LOGE(TAG, "-------------------  ESP32 FW Version : 1.6.5 -------------------");
 
     for (;;) {
         if (xQueueReceive(uart0_queue, (void *)&event, (portTickType)portMAX_DELAY)) {
@@ -1326,9 +1385,9 @@ static void udp_client_task(void *pvParameters)
                         if(event.size == 12) 
                         {
                             for (int i=0; i<12; i++) //gps_hr_chunck_data[11] ,12byte. 
-                              {
-                                   gps_hr_chunck_data[i + offset] = dtmp[i];
-                              }
+                            {
+                                gps_hr_chunck_data[i + offset] = dtmp[i];
+                            }
                             gps_hr_chunck_data[12+offset] = ble_hr_share_val;
                             gps_hr_chunck_data[13+offset] = '\n';
                             offset += 14; 	
@@ -1337,67 +1396,67 @@ static void udp_client_task(void *pvParameters)
                         {
                             for (int i=0; i<22; i++) //gps_hr_chunck_data[10] 
                             {
-                                 gps_hr_chunck_data[i + offset] = dtmp[i];
+                                gps_hr_chunck_data[i + offset] = dtmp[i];
                             }
                             gps_hr_chunck_data[22 + offset] = ble_hr_share_val;
                             gps_hr_chunck_data[23 + offset] = '\n';
                             offset += 24;	
                         }
                         data_integ_cnt ++;
-			if (data_integ_cnt == 2) // yong jun : GPS 2hz. call 2 times in a sec
-            		// if (data_integ_cnt == 5) //yong jun : GPS 5hz. call 5 times in a sec 
-            		{
-				
-                		ESP_LOGI(TAG, "@@@@@@@@@@@ heap3 is %u", heap_caps_get_free_size(MALLOC_CAP_8BIT));
-                		// printf("length of udp data = %d \n", strlen((const char*)gps_hr_chunck_data));
-               			 //yong jun : add sent data by mcu
-		                if(event.size == 12)
-		                {
-					add_tx_packet_2hz(&gps_hr_chunck_data[0], indata_counter_by_mcu);
-					tx_payload_length = 588; //28 byte x 21sec = 588 byte	
-		                 }
-				else if(event.size == 22)
-				{
-					add_tx_packet_with_gps_coordinate_2hz(&gps_hr_chunck_data[0], indata_counter_by_mcu);
-					tx_payload_length = 720; //48 byte x 15sec = 720 byte 
-				}
-				indata_counter_by_mcu++;
-			    if(event.size == 12 && indata_counter_by_mcu>20)  // gps 2hz. after 21sec, send data 
-			    {
-			    	/*
-				printf("UDP data send [muc 12 byte]\r\n");
-				for(int k=0; k<715; k++)
-				{
-					printf("%c",tx_payload_buffer[k]);
-				}
-				*/
-                            	udp_msg_sent((const char *)udp_server_ip ,(const char *)tx_payload_buffer);
-			    }
-			    else if(event.size == 22 && indata_counter_by_mcu>14) // gps 2hz. after 15sec, send data
-			    {
-				 /*
-				   printf("UDP data send [muc 22 byte]\r\n");
-				   for(int k=0; k<720; k++)
-				  {
-					printf("%c",tx_payload_buffer[k]);
-				}
-				 */	
-                            	udp_msg_sent((const char *)udp_server_ip ,(const char *)tx_payload_buffer);
-			    }
-			    if(ble_device_connected)
-			    {
-	                            hr_data_to_mcu[0] = 'H';
-	                            hr_data_to_mcu[1] = 'R';
-	                            hr_data_to_mcu[2] =  ble_hr_share_val;
-	                            hr_data_to_mcu[3] = '\n';
-	                            // printf("Check ESP -> MCU HR data uart1 = %s \n", (const char*)hr_data_to_mcu);
 
-	                            for (int k = 0; k < 5; k++)
-	                            {
-	                                uart_write_bytes(ESP_COMMU_UART, (const char *) hr_data_to_mcu, 4);
-	                                vTaskDelay(10/portTICK_PERIOD_MS);
-	                            }	                            
-			    }
+                        if (data_integ_cnt == 2) // yong jun : GPS 2hz. call 2 times in a sec
+                        // if (data_integ_cnt == 5) //yong jun : GPS 5hz. call 5 times in a sec 
+                        {
+                            ESP_LOGI(TAG, "@@@@@@@@@@@ heap3 is %u", heap_caps_get_free_size(MALLOC_CAP_8BIT));
+                            // printf("length of udp data = %d \n", strlen((const char*)gps_hr_chunck_data));
+                            //yong jun : add sent data by mcu
+                            if(event.size == 12)
+                            {
+                                add_tx_packet_2hz(&gps_hr_chunck_data[0], indata_counter_by_mcu);
+                                tx_payload_length = 588; //28 byte x 21sec = 588 byte	
+                            }
+                            else if(event.size == 22)
+                            {
+                                add_tx_packet_with_gps_coordinate_2hz(&gps_hr_chunck_data[0], indata_counter_by_mcu);
+                                tx_payload_length = 720; //48 byte x 15sec = 720 byte 
+                            }
+                            indata_counter_by_mcu++;
+                            if(event.size == 12 && indata_counter_by_mcu>20)  // gps 2hz. after 21sec, send data 
+                            {
+                                /*
+                            printf("UDP data send [muc 12 byte]\r\n");
+                            for(int k=0; k<715; k++)
+                            {
+                                printf("%c",tx_payload_buffer[k]);
+                            }
+                            */
+                                udp_msg_sent((const char *)udp_server_ip ,(const char *)tx_payload_buffer);
+                            }
+                            else if(event.size == 22 && indata_counter_by_mcu>14) // gps 2hz. after 15sec, send data
+                            {
+                            /*
+                            printf("UDP data send [muc 22 byte]\r\n");
+                            for(int k=0; k<720; k++)
+                            {
+                                printf("%c",tx_payload_buffer[k]);
+                            }
+                            */	
+                                udp_msg_sent((const char *)udp_server_ip ,(const char *)tx_payload_buffer);
+                            }
+                            if(ble_device_connected)
+                            {
+                                hr_data_to_mcu[0] = 'H';
+                                hr_data_to_mcu[1] = 'R';
+                                hr_data_to_mcu[2] =  ble_hr_share_val;
+                                hr_data_to_mcu[3] = '\n';
+                                // printf("Check ESP -> MCU HR data uart1 = %s \n", (const char*)hr_data_to_mcu);
+
+                                for (int k = 0; k < 5; k++)
+                                {
+                                    uart_write_bytes(ESP_COMMU_UART, (const char *) hr_data_to_mcu, 4);
+                                    vTaskDelay(10/portTICK_PERIOD_MS);
+                                }	                            
+                            }
 				
                             memset(gps_hr_chunck_data, 0, 256);
                             memset(hr_data_to_mcu, 0, 4);
@@ -1447,6 +1506,34 @@ static void udp_client_task(void *pvParameters)
                     else if (event.size == 9 && dtmp[0] == 'O' && dtmp[1] == 'T' && dtmp[2] == 'A' && dtmp[3] == 'U' )
                     {
                         start_http_ota(OTA_DOWNLOAD_URL);
+                    }
+                    else if (event.size == 10 && dtmp[0] == 'W' && dtmp[1] == 'I' && dtmp[2] == 'F' && dtmp[3] == 'I' )
+                    {
+                        int rtn_rssi;
+                        char rssi_char_th[2];
+                        printf("Start WiFi RSSI scan\n");
+                        printf("%d, %d \n", dtmp[8], dtmp[9]);
+                        rssi_char_th[0] = dtmp[8];
+                        rssi_char_th[1] = dtmp[9];
+                        int rssi_int_th = atoi(rssi_char_th);
+
+                        printf("RSSI THRESHOLD = %d \n", rssi_int_th);
+                        rtn_rssi = wifi_scan();
+                        rtn_rssi = abs(rtn_rssi);
+                        printf("Returned FACTORY SETTING RSSI = %d\n", rtn_rssi);
+
+                        if (rtn_rssi < rssi_int_th && rtn_rssi != 0)
+                        {
+                            printf("QC PASS GPIO set\n");
+                        }
+                        else if (rtn_rssi == 0)
+                        {
+                            printf("No matching ap found \n");
+                        }
+                        else
+                        {
+                            printf("QC FAIL GPIO set\n");
+                        }
                     }
                     else
                     {
@@ -1522,6 +1609,25 @@ void app_main(void)
 
     // Install UART driver, and get the queue.
     uart_driver_install(ESP_COMMU_UART, UART_BUF_SIZE * 2, UART_BUF_SIZE * 2, 100, &uart0_queue, 0);
+
+    // gpio_config_t io_conf;
+    // //disable interrupt
+    // io_conf.intr_type = GPIO_INTR_DISABLE;
+    // //set as output mode
+    // io_conf.mode = GPIO_MODE_OUTPUT;
+    // //bit mask of the pins that you want to set,e.g.GPIO15/16
+    // io_conf.pin_bit_mask = GPIO_OUTPUT_PIN_SEL;
+    // //disable pull-down mode
+    // io_conf.pull_down_en = 0;
+    // //disable pull-up mode
+    // io_conf.pull_up_en = 0;
+    // //configure GPIO with the given settings
+    // gpio_config(&io_conf);
+
+    // gpio_set_level(GPIO_OUTPUT_IO_0, 1);
+    // vTaskDelay(5000/portTICK_PERIOD_MS);
+    // gpio_set_level(GPIO_OUTPUT_IO_0, 0);
+
 
     #if CONFIG_PM_ENABLE
         // Configure dynamic frequency scaling:
